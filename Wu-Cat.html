@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>貓咪拼圖</title>
+<style>
+:root{--bg:#fbf1ee;--fg:#7a2e2e;--card:#f6e6e0;--ov:rgba(251,241,238,.92);box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#2a1f24;--fg:#f0cfc8;--card:#3a2b31;--ov:rgba(42,31,36,.92);color-scheme:dark}}
+html,body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;-webkit-user-select:none;user-select:none}
+#app{max-width:460px;margin:0 auto;padding:10px 12px 24px;text-align:center;position:relative}
+.top{display:flex;justify-content:space-around;font-size:15px}.top b{display:block;font-size:26px}
+#lives{font-size:26px;letter-spacing:4px;margin:2px 0 8px}
+.rules{display:flex;gap:6px;background:var(--card);border-radius:14px;padding:8px;font-size:12px;margin-bottom:8px}
+.rules div{flex:1}
+#pal{display:flex;justify-content:center;gap:6px;margin:6px 0 8px;min-height:18px}
+#pal i{width:16px;height:16px;border-radius:50%;display:block;transition:opacity .2s}
+#grid{display:grid;gap:4px;width:100%;aspect-ratio:1}
+.c{border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:clamp(14px,6vw,30px);cursor:pointer;color:#fff;font-weight:700;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+.c.hint{animation:bl .5s 4;outline:3px solid #fff}
+.c.bad{animation:sh .3s}
+@keyframes bl{50%{transform:scale(.8)}}
+@keyframes sh{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.tools{display:flex;justify-content:center;gap:28px;margin-top:16px}
+.tools button{position:relative;width:64px;height:64px;border-radius:50%;border:0;background:var(--card);font-size:30px;cursor:pointer}
+.tools button:disabled,#ov button:disabled{opacity:.4}#cd{font-size:12px;opacity:.8;height:14px;margin-bottom:4px}
+#mb{position:absolute;left:12px;top:10px;width:40px;height:40px;border-radius:50%;border:0;background:var(--card);color:var(--fg);font-size:20px}
+#menu{position:fixed;inset:0;background:var(--bg);z-index:8;display:none;overflow:auto;padding:calc(12px + env(safe-area-inset-top,0px)) 12px 24px}
+.mh{display:flex;justify-content:space-between;align-items:center;max-width:460px;margin:0 auto 12px;font-size:20px}
+#mx{border:0;background:var(--card);color:var(--fg);width:36px;height:36px;border-radius:50%;font-size:16px}
+#mg{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;max-width:460px;margin:0 auto}
+.lb{aspect-ratio:1;border:0;border-radius:12px;background:var(--card);color:var(--fg);font-size:16px;font-weight:700;position:relative}
+.lb small{position:absolute;right:5px;bottom:2px;font-size:10px}.lb.dn{background:#c6f68d;color:#2c4a12}.lb.cur{outline:3px solid #e5736b}.lb:disabled{opacity:.4}
+.tools span{position:absolute;top:-4px;right:-4px;background:#e53935;color:#fff;font-size:13px;border-radius:50%;width:22px;height:22px;line-height:22px}
+#ov{position:fixed;inset:0;background:var(--ov);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-size:24px;z-index:9}
+#ov button{font-size:18px;padding:10px 28px;border-radius:24px;border:0;background:#e5736b;color:#fff}
+</style></head><body><div id="app">
+<button id="mb">☰</button><div class="top"><div>關卡<b id="lv">1</b></div><div>分數<b id="sc">0</b></div></div>
+<div id="lives"></div><div id="cd"></div>
+<div class="rules"><div>🎨 一種顏色一隻貓</div><div>↔️ 每行每列各一隻貓</div><div>🚫 貓咪不能相鄰(含斜角)</div></div>
+<div id="pal"></div>
+<div id="grid"></div>
+<div class="tools"><button id="bc">🐱<span id="nc">5</span></button><button id="bh">💡<span id="nh">5</span></button></div>
+<p style="font-size:12px;opacity:.7">點一下 ✕ 標記，點兩下放貓，再點取消。放錯貓會扣一條魚。</p>
+<div id="menu"><div class="mh"><b>選擇關卡</b><button id="mx">✕</button></div><div id="mg"></div></div>
+<div id="ov"><div id="ovt"></div><button id="ovb"></button><button id="ovb2" style="display:none"></button></div>
+</div>
+<script>
+const COL=["#c6f68d","#4ecdc4","#b9c8ec","#a77bff","#f58ad0","#d98a4a","#ffb85c","#f5e03a","#ffc2d9"];
+let S={level:1,score:0,tc:5,th:5};
+try{const s=JSON.parse(localStorage.getItem("catpuz"));if(s)S=s}catch(e){}
+S.lives??=3;S.ts??=0;S.max??=S.level;S.cc??={};for(let k=1;k<S.max&&k<=200;k++)S.cc[k]??=1;let n,reg,sol,mk,nf=0;
+Object.defineProperty(window,"lives",{get:()=>S.lives,set:v=>{if(S.lives==3&&v<3)S.ts=Date.now();S.lives=v}});
+function regen(){if(S.lives>=3){S.ts=0;return}if(!S.ts)S.ts=Date.now();const k=Math.floor((Date.now()-S.ts)/1800000);if(k>0){S.lives=Math.min(3,S.lives+k);S.ts=S.lives>=3?0:S.ts+k*1800000}}
+function fmt(){const s=Math.max(0,Math.ceil((S.ts+1800000-Date.now())/1000));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")}
+function noFish(){nf=1;$("ovt").textContent="💔 魚用完了";$("ovb2").style.display="";$("ov").style.display="flex";
+$("ovb").onclick=()=>{if(S.score<300)return;S.score-=300;S.lives=3;S.ts=0;nf=0;$("ov").style.display="none";draw()};
+$("ovb2").onclick=()=>{if(S.lives<1)return;nf=0;$("ov").style.display="none";draw()};nfu()}
+function nfu(){$("ovb").textContent="扣 300 分補滿 3 條 🐟";$("ovb").disabled=S.score<300;const w=S.lives>0;$("ovb2").disabled=!w;$("ovb2").textContent=w?"🐟 小魚乾來了，繼續":"等待 "+fmt()+" 補 1 條"}
+function tick(){const b=S.lives;regen();if(S.lives!=b)draw();$("cd").textContent=S.lives<3?"🐟 下一條 "+fmt():"";if(nf)nfu()}
+let rnd=Math.random;const $=id=>document.getElementById(id),R=a=>a[Math.floor(rnd()*a.length)];
+function seed(s){return()=>{s|=0;s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function rate(n,g){const c=Array.from({length:n},()=>Array(n).fill(1)),P=[Array(n).fill(0),Array(n).fill(0),Array(n).fill(0)];let placed=0,adv=0;
+const key=(r,x,t)=>[r,x,g[r][x]][t];
+const cells=(t,k)=>{const a=[];for(let r=0;r<n;r++)for(let x=0;x<n;x++)if(c[r][x]&&key(r,x,t)==k)a.push([r,x]);return a};
+const put=(r,x)=>{placed++;for(let t=0;t<3;t++)P[t][key(r,x,t)]=1;for(let i=0;i<n;i++)for(let j=0;j<n;j++)if(i==r||j==x||g[i][j]==g[r][x]||(Math.abs(i-r)<2&&Math.abs(j-x)<2))c[i][j]=0};
+for(;;){let ch=0;
+for(let t=0;t<3&&!ch;t++)for(let k=0;k<n&&!ch;k++){if(P[t][k])continue;const cs=cells(t,k);if(cs.length==1){put(cs[0][0],cs[0][1]);ch=1}}
+if(!ch){for(let t=0;t<3;t++)for(let k=0;k<n;k++){if(P[t][k])continue;const cs=cells(t,k);if(!cs.length)continue;
+for(let u=0;u<3;u++){if(u==t)continue;const v=key(cs[0][0],cs[0][1],u);if(!cs.every(p=>key(p[0],p[1],u)==v))continue;
+for(let r=0;r<n;r++)for(let x=0;x<n;x++)if(c[r][x]&&key(r,x,u)==v&&key(r,x,t)!=k){c[r][x]=0;ch=1}}}
+if(ch)adv++}
+if(!ch)break}
+return placed==n?adv:30+(n-placed)}
+function perm(n){const p=[];(function go(r){if(r==n)return true;const cs=[...Array(n).keys()].sort(()=>rnd()-.5);
+for(const c of cs){if(p.includes(c)||(r&&Math.abs(p[r-1]-c)<2))continue;p[r]=c;if(go(r+1))return true;p.length=r}return false})(0);return p}
+function grow(n,p){const g=Array.from({length:n},()=>Array(n).fill(-1));p.forEach((c,r)=>g[r][c]=r);
+for(let k=n*n-n;k>0;k--){const f=[];for(let r=0;r<n;r++)for(let c=0;c<n;c++)if(g[r][c]<0)for(const[a,b]of[[1,0],[-1,0],[0,1],[0,-1]]){const y=r+a,x=c+b;if(g[y]&&g[y][x]>=0)f.push([r,c,g[y][x]])}
+const[r,c,v]=R(f);g[r][c]=v}return g}
+function count(n,g){let t=0;const cu=Array(n).fill(0),ru=Array(n).fill(0);
+(function go(r,pc){if(t>1)return;if(r==n){t++;return}for(let c=0;c<n;c++){if(cu[c]||ru[g[r][c]]||(r&&Math.abs(pc-c)<2))continue;cu[c]=ru[g[r][c]]=1;go(r+1,c);cu[c]=ru[g[r][c]]=0}})(0,-9);return t}
+function newPuzzle(){const L=S.level;rnd=seed(L*7919+13);n=Math.min(9,5+Math.floor((L-1)/3));
+const tg=L<13?L/6:(L-13)/187*35;let best=null,bd=1e9;
+for(let i=0;(i<80&&bd>1)||!best;i++){const p=perm(n),g=grow(n,p);if(count(n,g)!=1)continue;const d=Math.abs(rate(n,g)-tg);if(d<bd){bd=d;best=[p,g]}}
+sol=best[0];reg=best[1];reset()}
+function reset(){mk=Array.from({length:n},()=>Array(n).fill(0));draw()}
+function cats(){let k=0;mk.forEach(r=>r.forEach(v=>k+=v==2));return k}
+function draw(){const g=$("grid");g.style.gridTemplateColumns=`repeat(${n},1fr)`;g.innerHTML="";
+for(let r=0;r<n;r++)for(let c=0;c<n;c++){const d=document.createElement("div");d.className="c";d.id=`c${r}_${c}`;d.style.background=COL[reg[r][c]];
+d.textContent=["","✕","🐱"][mk[r][c]];d.onclick=()=>tap(r,c);g.appendChild(d)}
+$("lv").textContent=S.level+"/200";$("sc").textContent=S.score;$("lives").textContent="🐟".repeat(lives)+"🫧".repeat(3-lives);
+$("nc").textContent=S.tc;$("nh").textContent=S.th;$("bc").disabled=!S.tc;$("bh").disabled=!S.th;
+$("pal").innerHTML=COL.slice(0,n).map((c,i)=>{let h=0;mk.forEach((row,r)=>row.forEach((v,x)=>{if(v==2&&reg[r][x]==i)h=1}));return `<i style="background:${c};opacity:${h?1:.35}"></i>`}).join("");
+try{localStorage.setItem("catpuz",JSON.stringify(S))}catch(e){}}
+function tap(r,c){if($("ov").style.display=="flex")return;const v=(mk[r][c]+1)%3;
+if(v==2&&sol[r]!=c){lives--;const e=$(`c${r}_${c}`);e.classList.add("bad");mk[r][c]=0;
+if(!lives){setTimeout(noFish,300)}else{setTimeout(draw,300);$("lives").textContent="🐟".repeat(lives)+"🫧".repeat(3-lives)}return}
+mk[r][c]=v;if(v==2)auto(r,c);draw();check()}
+function auto(r,c){for(let i=0;i<n;i++)for(let j=0;j<n;j++){if(mk[i][j]==2)continue;
+if(i==r||j==c||reg[i][j]==reg[r][c]||(Math.abs(i-r)<2&&Math.abs(j-c)<2))mk[i][j]=1}}
+function check(){if(cats()==n)setTimeout(()=>{const first=S.level>=S.max,cc=S.cc[S.level]||0,bs=80+lives*40;S.score+=cc?(cc==1?bs/2:bs/(S.max-1-S.level>10?10:4)):bs;S.cc[S.level]=cc+1;if(S.level>=200)S.max=201;
+if(S.level>=200){over("🏆 恭喜，200 關全破！","重新開始",()=>{S.level=1;newPuzzle()});return}
+if(first){S.max=S.level+1;S.tc++;S.th++}S.level++;draw();over("🎉 過關！","下一關",()=>newPuzzle())},300)}
+function over(t,b,f){$("ovb2").style.display="none";$("ovb").disabled=false;$("ovt").textContent=t;$("ovb").textContent=b;$("ov").style.display="flex";$("ovb").onclick=()=>{$("ov").style.display="none";f()}}
+function pick(){const rs=[...Array(n).keys()].filter(r=>mk[r][sol[r]]!=2);return rs.length?R(rs):-1}
+$("bc").onclick=()=>{const r=pick();if(r<0||!S.tc)return;S.tc--;mk[r][sol[r]]=2;auto(r,sol[r]);draw();check()};
+$("bh").onclick=()=>{const r=pick();if(r<0||!S.th)return;S.th--;draw();$(`c${r}_${sol[r]}`).classList.add("hint")};
+function openMenu(){let h="";for(let k=1;k<=200;k++){const lk=k>S.max,dn=k<S.max;h+=`<button class="lb${k==S.level?" cur":""}${dn?" dn":""}" ${lk?"disabled":""} data-k="${k}">${lk?"🔒":k}${dn?"<small>✓</small>":""}</button>`}$("mg").innerHTML=h;$("menu").style.display="block";$("menu").scrollTop=0}
+$("mg").onclick=e=>{const b=e.target.closest("button");if(!b||b.disabled)return;S.level=+b.dataset.k;$("menu").style.display="none";newPuzzle()};
+$("mb").onclick=openMenu;$("mx").onclick=()=>{$("menu").style.display="none"};
+newPuzzle();tick();setInterval(tick,1000);if(S.lives<1)noFish();
+</script></body></html>
