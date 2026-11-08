@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>2048</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#faf8ef;--fg:#776e65;--board:#bbada0;--cell:#cdc1b4;--btn:#8f7a66;--btnfg:#f9f6f2;--panel:#bbada0;
+--t2:#eee4da;--t4:#ede0c8;--t8:#f2b179;--t16:#f59563;--t32:#f67c5f;--t64:#f65e3b;--t128:#edcf72;--t256:#edcc61;--t512:#edc850;--t1024:#edc53f;--t2048:#edc22e;--tdark:#776e65;--tlight:#f9f6f2}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1e1c1a;--fg:#d8cfc4;--board:#3a3430;--cell:#4a423c;--btn:#a8896c;--btnfg:#1e1c1a;--panel:#3a3430;--t2:#e8ddd0;--tdark:#4a3f35}}
+:root[data-theme="dark"]{--bg:#1e1c1a;--fg:#d8cfc4;--board:#3a3430;--cell:#4a423c;--btn:#a8896c;--btnfg:#1e1c1a;--panel:#3a3430;--t2:#e8ddd0;--tdark:#4a3f35}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;touch-action:none;overflow:hidden;display:flex;justify-content:center;align-items:center;user-select:none;-webkit-user-select:none}
+.wrap{width:min(92vw,440px)}
+.top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px}
+h1{margin:0;font-size:44px;font-weight:800}
+.sc{display:flex;gap:8px}
+.box{background:var(--panel);color:#fff;border-radius:8px;padding:6px 14px;text-align:center;min-width:56px}
+.box small{display:block;font-size:11px;opacity:.85}
+.box b{font-size:20px}
+.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:14px}
+button{background:var(--btn);color:var(--btnfg);border:0;border-radius:8px;padding:10px 18px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer}
+#board{position:relative;box-sizing:border-box;background:var(--board);border-radius:10px;padding:10px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.c{aspect-ratio:1/1;min-width:0;overflow:hidden;background:var(--cell);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:clamp(22px,8vw,40px);color:var(--tdark)}
+.c.n{animation:pop .18s}.c.m{animation:mg .16s}
+@keyframes pop{from{transform:scale(.3)}to{transform:scale(1)}}
+@keyframes mg{50%{transform:scale(1.15)}}
+.v2{background:var(--t2)}.v4{background:var(--t4)}
+.v8{background:var(--t8);color:var(--tlight)}.v16{background:var(--t16);color:var(--tlight)}.v32{background:var(--t32);color:var(--tlight)}.v64{background:var(--t64);color:var(--tlight)}
+.v128{background:var(--t128);color:var(--tlight);font-size:clamp(20px,7vw,34px)}.v256{background:var(--t256);color:var(--tlight);font-size:clamp(20px,7vw,34px)}.v512{background:var(--t512);color:var(--tlight);font-size:clamp(20px,7vw,34px)}
+.v1024{background:var(--t1024);color:var(--tlight);font-size:clamp(16px,6vw,28px)}.v2048{background:var(--t2048);color:var(--tlight);font-size:clamp(16px,6vw,28px)}.vb{background:#3c3a32;color:#fff;font-size:clamp(14px,5vw,24px)}
+#ov{position:absolute;inset:0;border-radius:10px;background:rgba(238,228,218,.82);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#776e65;font-size:30px;font-weight:800;text-align:center}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) #ov{background:rgba(30,28,26,.85);color:#d8cfc4}}
+p.tip{margin:12px 0 0;font-size:13px;opacity:.8;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>2048</h1>
+    <div class="sc"><div class="box"><small>分數</small><b id="s">0</b></div><div class="box"><small>最高分</small><b id="b">0</b></div></div>
+  </div>
+  <div class="bar"><span>合併數字，湊出 2048！</span><button id="nb">新遊戲</button></div>
+  <div id="board"></div>
+  <p class="tip">滑動螢幕或使用方向鍵／WASD 移動</p>
+</div>
+<script>
+const N=4;let g,score,best=0,won=false,over=false,keep=false;
+const $=id=>document.getElementById(id);
+const board=$('board');
+try{best=+localStorage.getItem('best2048')||0}catch(e){}
+const ov=document.createElement('div');ov.id='ov';
+function init(){g=Array.from({length:N},()=>Array(N).fill(0));score=0;won=false;over=false;keep=false;ov.style.display='none';add();add();draw()}
+function add(){const e=[];g.forEach((r,i)=>r.forEach((v,j)=>{if(!v)e.push([i,j])}));if(!e.length)return null;const[p,q]=e[Math.random()*e.length|0];g[p][q]=Math.random()<.9?2:4;return[p,q]}
+let newPos=null,merged=new Set();
+function draw(){
+  board.innerHTML='';
+  g.forEach((r,i)=>r.forEach((v,j)=>{
+    const d=document.createElement('div');
+    d.className='c'+(v?' '+(v>2048?'vb':'v'+v):'');
+    if(v)d.textContent=v;
+    if(newPos&&newPos[0]==i&&newPos[1]==j)d.className+=' n';
+    else if(merged.has(i*N+j))d.className+=' m';
+    board.appendChild(d);
+  }));
+  board.appendChild(ov);
+  $('s').textContent=score;
+  if(score>best){best=score;try{localStorage.setItem('best2048',best)}catch(e){}}
+  $('b').textContent=best;
+}
+function slide(row){
+  const a=row.map((v,i)=>({v,i})).filter(x=>x.v),out=[],mg=[];
+  for(let k=0;k<a.length;k++){
+    if(k+1<a.length&&a[k].v===a[k+1].v){const s=a[k].v*2;score+=s;out.push(s);mg.push(out.length-1);k++}
+    else out.push(a[k].v);
+  }
+  while(out.length<N)out.push(0);
+  return{out,mg};
+}
+function move(dir){
+  if(over)return;
+  let moved=false;merged=new Set();
+  for(let i=0;i<N;i++){
+    const idx=[];for(let j=0;j<N;j++){
+      idx.push(dir==='left'?[i,j]:dir==='right'?[i,N-1-j]:dir==='up'?[j,i]:[N-1-j,i]);
+    }
+    const row=idx.map(([r,c])=>g[r][c]);
+    const{out,mg}=slide(row);
+    out.forEach((v,k)=>{const[r,c]=idx[k];if(g[r][c]!==v)moved=true;g[r][c]=v});
+    mg.forEach(k=>{const[r,c]=idx[k];merged.add(r*N+c)});
+  }
+  if(!moved)return;
+  newPos=add();draw();newPos=null;
+  if(!won&&!keep&&g.some(r=>r.includes(2048))){won=true;show('🎉 你贏了！',true)}
+  else if(!canMove()){over=true;show('遊戲結束',false)}
+}
+function canMove(){
+  for(let i=0;i<N;i++)for(let j=0;j<N;j++){
+    if(!g[i][j])return true;
+    if(j<N-1&&g[i][j]===g[i][j+1])return true;
+    if(i<N-1&&g[i][j]===g[i+1][j])return true;
+  }
+  return false;
+}
+function show(t,cont){
+  ov.innerHTML='<div>'+t+'</div><div style="display:flex;gap:10px"></div>';
+  const w=ov.lastChild;
+  if(cont){const b=document.createElement('button');b.textContent='繼續玩';b.onclick=()=>{keep=true;ov.style.display='none'};w.appendChild(b)}
+  const n=document.createElement('button');n.textContent='再來一局';n.onclick=init;w.appendChild(n);
+  ov.style.display='flex';
+}
+$('nb').onclick=init;
+document.addEventListener('keydown',e=>{
+  const m={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',a:'left',d:'right',w:'up',s:'down'}[e.key];
+  if(m){e.preventDefault();move(m)}
+});
+let sx,sy;
+document.addEventListener('touchstart',e=>{if(e.target.closest('button'))return;sx=e.touches[0].clientX;sy=e.touches[0].clientY},{passive:true});
+document.addEventListener('touchend',e=>{
+  if(sx==null)return;
+  const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;sx=null;
+  if(Math.max(Math.abs(dx),Math.abs(dy))<24)return;
+  move(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'));
+});
+init();
+</script>
+</body>
+</html>
